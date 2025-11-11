@@ -1,7 +1,6 @@
 import lmstudio as lms
 from ferramentas import (
-    verify_current, verify_pressure, verify_rpm, 
-    verify_temperature, verify_vibration, execute_query
+     execute_query, verificar_sensor
 )
 
 # Modelos
@@ -9,24 +8,34 @@ draft_model = 'qwen3-0.6b'
 main_model = 'qwen/qwen3-4b-2507'
 
 # PROMPT DO SISTEMA
-system_prompt = """Você é uma IA de monitoramento de equipamentos que usa ferramentas para analisar dados de sensores.
+system_prompt = '''Você é uma IA de monitoramento de equipamentos que usa ferramentas para analisar dados de sensores.
 
-FLUXO DE TRABALHO:
-1. Verificar cada sensor usando as ferramentas de verificação
-2. Fornecer diagnóstico final
+FLUXO DE TRABALHO OBRIGATÓRIO:
 
-BANCO DE DADOS: tabela anomalo
-Colunas: id_maquina, timestamp, temperatura, vibracao, corrente, rpm, pressao
+1. BUSCAR DADOS: Use `execute_query` com esta consulta (linha única, sem quebras):
+   WITH UltimosSensores AS (SELECT id_maquina, tipo_maquina, nome_sensor, valor_sensor, timestamp, ROW_NUMBER() OVER(PARTITION BY nome_sensor ORDER BY timestamp DESC) as rn FROM dados_sensor WHERE id_maquina = '[NOME_DA_MAQUINA]') SELECT id_maquina, tipo_maquina, nome_sensor, valor_sensor, timestamp FROM UltimosSensores WHERE rn = 1;
 
-FERRAMENTAS DISPONÍVEIS:
-- execute_query(consulta): Executar SQL
-- verify_temperature(temperature): Verificar temperatura
-- verify_vibration(vibration): Verificar vibração  
-- verify_current(current): Verificar corrente
-- verify_rpm(rpm): Verificar RPM
-- verify_pressure(pressure): Verificar pressão
+2. ITERAR E VERIFICAR: A consulta retorna MÚLTIPLAS LINHAS. Chame `verificar_sensor(id_maquina, nome_sensor, valor_sensor)` para CADA linha. Anote o status de cada sensor.
 
-IMPORTANTE: Sempre use TODAS as ferramentas antes de dar o diagnóstico."""
+3. REGISTRAR ALERTA: Se PELO MENOS UM sensor retornou "crítico", execute (linha única):
+   INSERT INTO alertas_sensor (id_maquina, tipo_maquina, timestamp, janela_dados_bruto, status) VALUES ('[ID_MAQUINA]', '[TIPO_MAQUINA]', '[TIMESTAMP_MAIS_RECENTE]', 'Alerta automático', 'DIAGNOSTICO_PENDENTE');
+
+4. DIAGNÓSTICO FINAL: Forneça um diagnóstico consolidado com status de cada sensor e se registrou alerta.
+
+BANCO DE DADOS: MariaDB
+- dados_sensor: id, id_maquina, tipo_maquina, timestamp, nome_sensor, valor_sensor
+- alertas_sensor: id_alerta, id_maquina, tipo_maquina, timestamp, janela_dados_bruto, status
+
+FERRAMENTAS:
+- `execute_query(consulta)`: SQL em linha única, sem \n
+- `verificar_sensor(id_maquina, nome_sensor, valor_sensor)`: Retorna status do sensor
+
+IMPORTANTE: 
+Sempre verifique TODOS os sensores. 
+Consultas SQL em linha única.
+Coloque o registro no alertas sensor só no final e SOMENTE se houver algum sensor crítico
+
+'''
 
 # Criar modelo
 model = lms.llm(main_model)
@@ -44,20 +53,12 @@ options = lms.LlmPredictionConfig(
 chat = lms.Chat(system_prompt)
 
 # Mensagem do usuário
-user_message = f"""Analise estes dados do equipamento:
-
-Máquina: 3
-Hora: 2025-10-27 14:31:00
-Temperatura: 60°C
-Vibração: 3.1 mm/s
-Corrente: 32 A
-RPM: 1100
-Pressão: 30 bar
+user_message = f"""Analise os dados do equipamento CAF-98-001 
 
 Lembre-se:
-1. INSERT no banco de dados primeiro
-2. Verificar todos os 5 sensores
-3. Dar o diagnóstico"""
+
+1. Verificar todos os sensores
+2. Dar o diagnóstico"""
 
 chat.add_user_message(user_message)
 
@@ -84,12 +85,8 @@ def on_prediction_fragment(fragment, round_index):
 
 # LISTA DE FERRAMENTAS
 tools = [
-    execute_query,     
-    verify_temperature, 
-    verify_vibration, 
-    verify_current, 
-    verify_rpm, 
-    verify_pressure
+    verificar_sensor,
+    execute_query
 ]
 
 print("="*60)
