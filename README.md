@@ -45,13 +45,13 @@ Antes de iniciar, certifique-se de ter os seguintes softwares instalados:
 4.  **Configure as variáveis de ambiente:**
     Crie um arquivo `.env` na raiz do projeto com as seguintes informações do seu banco de dados MariaDB:
     ```
-    DB_USER=root
+    DB_USER=xxxx
     DB_PASSWORD=
-    DB_HOST=127.0.0.1
-    DB_PORT=3306
+    DB_HOST=xxxxxx
+    DB_PORT=xxx
     DB_NAME=project_smith
     ```
-    *Atenção:* Altere `DB_PASSWORD` se você tiver uma senha para o seu usuário `root` do MariaDB.
+
 
 ## Como Executar
 
