@@ -2,7 +2,7 @@ import lmstudio as lms
 from ferramentas import (
      execute_query, verificar_sensor
 )
-
+from orquestrador import executar_orquestrador
 # Modelos
 draft_model = 'qwen3-0.6b'
 main_model = 'qwen/qwen3-4b-2507'
@@ -17,8 +17,8 @@ FLUXO DE TRABALHO OBRIGATÓRIO:
 
 2. ITERAR E VERIFICAR: A consulta retorna MÚLTIPLAS LINHAS. Chame `verificar_sensor(id_maquina, nome_sensor, valor_sensor)` para CADA linha. Anote o status de cada sensor.
 
-3. REGISTRAR ALERTA: Se PELO MENOS UM sensor retornou "crítico", execute (linha única):
-   INSERT INTO alertas_sensor (id_maquina, tipo_maquina, timestamp, janela_dados_bruto, status) VALUES ('[ID_MAQUINA]', '[TIPO_MAQUINA]', '[TIMESTAMP_MAIS_RECENTE]', 'Alerta automático', 'DIAGNOSTICO_PENDENTE');
+3. REGISTRAR ALERTA: Se PELO MENOS UM sensor retornou "crítico", monte um JSON com TODOS os sensores verificados e execute (linha única):
+   INSERT INTO alertas_sensor (id_maquina, tipo_maquina, timestamp, janela_dados_bruto, status) VALUES ('[ID_MAQUINA]', '[TIPO_MAQUINA]', DATE_FORMAT('[TIMESTAMP_MAIS_RECENTE]', '%Y-%m-%d %H:%i:%s'), '{"sensor1": {"valor": X, "critico": true}, "sensor2": {"valor": Y, "critico": false}}', 'DIAGNOSTICO_PENDENTE');
 
 4. DIAGNÓSTICO FINAL: Forneça um diagnóstico consolidado com status de cada sensor e se registrou alerta.
 
@@ -33,12 +33,14 @@ FERRAMENTAS:
 IMPORTANTE: 
 Sempre verifique TODOS os sensores. 
 Consultas SQL em linha única.
-Coloque o registro no alertas sensor só no final e SOMENTE se houver algum sensor crítico
-
+Coloque OBRIGATORIAMENTE o registro na tabela alertas_sensor quando houver crítico antes de dar resposta final,
+e coloque na resposta_final somente se tiver um sensor critico a palavra chave: "agente_orchestrador_executar"
+NÃO ALUCINE EM SOMENTE DAR A CONSULTA SQL DO ALERTAS_SENSOR, INSIRA OBRIGATORIAMENTE NO BANCO DE DADOS USANDO EXECUTE_QUERY
 '''
 
 # Criar modelo
 model = lms.llm(main_model)
+
 
 options = lms.LlmPredictionConfig(
         temperature=0.98,
@@ -83,6 +85,9 @@ def on_message(message):
 def on_prediction_fragment(fragment, round_index):
     print(fragment.content, end='', flush=True)
 
+def palavra_chave(chat:lms.Chat):
+    return chat._get_history()['messages'][-1]['content'][0]['text']
+
 # LISTA DE FERRAMENTAS
 tools = [
     verificar_sensor,
@@ -95,7 +100,8 @@ print("="*60)
 
 
 try:
-    result = model.act(
+    
+    result, chat = model.act(
         chat,
         tools,
         config=options,
@@ -104,15 +110,19 @@ try:
         on_prediction_completed=on_prediction_completed,
         on_message=on_message,
         on_prediction_fragment=on_prediction_fragment,
-        max_parallel_tool_calls=1  
+        max_parallel_tool_calls=1,
     )
     
     print("\n" + "="*60)               
     print(" RESULTADO FINAL:")
     print("="*60)
-    print(result)  
+
 
 except Exception as e:
     print(f"\n ERRO: {e}")
     import traceback
     traceback.print_exc()
+
+palavra = palavra_chave(chat)
+if 'agente_orchestrador_executar' in palavra:
+    executar_orquestrador(chat)
