@@ -4,5 +4,4 @@ mariadb
 pandas
 numpy
 lmstudio
-ollama # Although lmstudio is used, ollama might be needed for Tool definition as seen in ferramentas.py
 python-dotenv
